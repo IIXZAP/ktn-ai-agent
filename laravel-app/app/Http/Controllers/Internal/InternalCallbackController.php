@@ -84,7 +84,7 @@ class InternalCallbackController extends Controller
                 $company = Company::firstOrCreate(
                     [
                         'campaign_id' => $data['campaign_id'],
-                        'name' => $item['name'],
+                        'company_name' => $item['name'],
                     ],
                     [
                         'province' => $item['province'] ?? null,
@@ -129,11 +129,21 @@ class InternalCallbackController extends Controller
             'results.*.website_status' => ['nullable', 'string', 'max:255'],
         ]);
 
-        DB::transaction(function () use ($data) {
+        // map website_status ที่ Python ส่งมา (found/not_found/...) ให้ตรงกับ enum ใน DB
+        $statusMap = [
+            'found' => 'active',
+            'not_found' => 'down',
+        ];
+
+        DB::transaction(function () use ($data, $statusMap) {
             foreach ($data['results'] as $item) {
                 Company::where('campaign_id', $data['campaign_id'])
-                    ->where('name', $item['company_name'])
-                    ->update(['web_url' => $item['web_url'] ?? null]);
+                    ->where('company_name', $item['company_name'])
+                    ->update([
+                        'web_url' => $item['web_url'] ?? null,
+                        'has_website' => $item['has_website'],
+                        'website_status' => $statusMap[$item['website_status'] ?? ''] ?? 'unknown',
+                    ]);
             }
         });
 
@@ -170,7 +180,7 @@ class InternalCallbackController extends Controller
         DB::transaction(function () use ($data) {
             foreach ($data['results'] as $item) {
                 $company = Company::where('campaign_id', $data['campaign_id'])
-                    ->where('name', $item['company_name'])
+                    ->where('company_name', $item['company_name'])
                     ->first();
 
                 if (! $company) {
@@ -239,7 +249,7 @@ class InternalCallbackController extends Controller
         DB::transaction(function () use ($data) {
             foreach ($data['results'] as $item) {
                 $company = Company::where('campaign_id', $data['campaign_id'])
-                    ->where('name', $item['company_name'])
+                    ->where('company_name', $item['company_name'])
                     ->first();
 
                 if (! $company) {
@@ -293,7 +303,7 @@ class InternalCallbackController extends Controller
                 }
 
                 $company = Company::where('campaign_id', $data['campaign_id'])
-                    ->where('name', $item['company_name'])
+                    ->where('company_name', $item['company_name'])
                     ->first();
 
                 if (! $company) {

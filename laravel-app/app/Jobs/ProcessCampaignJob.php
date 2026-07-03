@@ -41,16 +41,18 @@ class ProcessCampaignJob implements ShouldQueue
     public function handle(PythonAgentClient $client): void
     {
         // ---- 1. สร้าง ResearchJob ----
-        // ใช้ firstOrCreate กันสร้างซ้ำถ้า Job นี้ถูก retry (attempt ที่ 2, 3)
-        $researchJob = ResearchJob::firstOrCreate(
-            [
-                'campaign_id' => $this->campaign->id,
-                'status' => 'pending',
-            ],
-            [
-                'progress_percent' => 0,
-            ]
-        );
+        // กันสร้างซ้ำตอน retry (attempt 2, 3): reuse งานที่ยังไม่จบ (pending/queued/running)
+        // แทนที่จะ key เฉพาะ status='pending' ซึ่งจะพลาดถ้า attempt แรกดันไปเป็น running แล้ว
+        $researchJob = ResearchJob::where('campaign_id', $this->campaign->id)
+            ->whereIn('status', ['pending', 'queued', 'running'])
+            ->latest()
+            ->first();
+
+        $researchJob ??= ResearchJob::create([
+            'campaign_id' => $this->campaign->id,
+            'status' => 'pending',
+            'progress_percent' => 0,
+        ]);
 
         try {
             $this->campaign->update([
@@ -92,7 +94,7 @@ class ProcessCampaignJob implements ShouldQueue
         ]);
 
         ResearchJob::where('campaign_id', $this->campaign->id)
-            ->where('status', 'pending')
+            ->whereIn('status', ['pending', 'queued', 'running'])
             ->update([
                 'status' => 'failed',
                 'error_message' => $exception->getMessage(),

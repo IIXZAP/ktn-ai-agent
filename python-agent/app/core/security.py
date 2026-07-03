@@ -16,7 +16,7 @@ async def verify_internal_secret(
 
     schema, __, token = authorization.partition(" ")
 
-    if schema.lower() != "Bearer" or token != settings.python_agent_secret:
+    if schema.lower() != "bearer" or token != settings.PYTHON_AGENT_SECRET:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid internal service credentials",

@@ -36,10 +36,10 @@ return [
     ],
 
     // Internal Python AI Processing
-    'Python_agent' => [
-        'url' => env('PYTHON_AGENT_URL', 'http://python-agent:8000'),
+    'python_agent' => [
+        'base_url' => env('PYTHON_AGENT_URL', 'http://python-agent:8001'),
         'secret' => env('PYTHON_AGENT_SECRET'),
-        'callback_url' => env('PYTHON_AGENT_CALLBACK_URL', 'http://laravel-app')
+        'callback_base_url' => env('PYTHON_AGENT_CALLBACK_URL', 'http://laravel-app/api/internal'),
     ]
 
 ];

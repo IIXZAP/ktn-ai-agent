@@ -31,6 +31,15 @@ use Illuminate\View\View;
 class CampaignController extends Controller
 {
     /**
+     * กันไม่ให้ user เปิด/สั่งงาน Campaign ของคนอื่นด้วยการเดา ID (IDOR)
+     * เรียกต้นทางทุก action ที่รับ Campaign เข้ามาผ่าน route-model binding
+     */
+    private function authorizeOwner(Campaign $campaign): void
+    {
+        abort_unless($campaign->created_by === auth()->id(), 403);
+    }
+
+    /**
      * แสดงรายการ Campaign ทั้งหมด (หน้า Dashboard)
      */
     public function index(Request $request): View
@@ -55,6 +64,8 @@ class CampaignController extends Controller
      */
     public function show(Campaign $campaign): View
     {
+        $this->authorizeOwner($campaign);
+
         $leads = Lead::where('campaign_id', $campaign->id)
             ->with('company')
             ->orderByDesc('lead_score')
@@ -101,6 +112,8 @@ class CampaignController extends Controller
      */
     public function parse(Campaign $campaign, PythonAgentClient $client): RedirectResponse
     {
+        $this->authorizeOwner($campaign);
+
         $result = $client->parseOnly($campaign);
 
         if (($result['status'] ?? null) !== 'parsed' || empty($result['criteria'])) {
@@ -132,6 +145,8 @@ class CampaignController extends Controller
      */
     public function updateCriteria(Request $request, Campaign $campaign): RedirectResponse
     {
+        $this->authorizeOwner($campaign);
+
         $data = $request->validate([
             'industries' => ['sometimes', 'array'],
             'locations' => ['sometimes', 'array'],
@@ -160,6 +175,8 @@ class CampaignController extends Controller
      */
     public function start(Campaign $campaign): RedirectResponse
     {
+        $this->authorizeOwner($campaign);
+
         if ($campaign->status !== 'draft') {
             return redirect()
                 ->route('campaigns.show', $campaign)
@@ -180,6 +197,8 @@ class CampaignController extends Controller
      */
     public function cancel(Campaign $campaign): RedirectResponse
     {
+        $this->authorizeOwner($campaign);
+
         if (in_array($campaign->status, ['completed', 'cancelled'], true)) {
             return redirect()
                 ->route('campaigns.show', $campaign)
@@ -201,6 +220,8 @@ class CampaignController extends Controller
      */
     public function retry(Campaign $campaign): RedirectResponse
     {
+        $this->authorizeOwner($campaign);
+
         if ($campaign->status !== 'failed') {
             return redirect()
                 ->route('campaigns.show', $campaign)

@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     APP_ENV: str
     APP_timezone: str
 
-    PYTHON_AGENT_SECRET: str = "0JIlSM0omSC9clze0vhNoIVH"
+    PYTHON_AGENT_SECRET: str
 
     # AI (Chatgpt)
     OPENAI_API_KEY: str | None = None
@@ -23,7 +23,7 @@ class Settings(BaseSettings):
 
     # Check ว่ามี api key
     @property
-    def has_ai(self) -> Settings:
+    def has_ai(self) -> bool:
         return bool(self.OPENAI_API_KEY)
 
 

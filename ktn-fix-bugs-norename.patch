@@ -1,0 +1,334 @@
+diff --git a/laravel-app/app/Http/Controllers/CampaignController.php b/laravel-app/app/Http/Controllers/CampaignController.php
+index 6b05564..819d8fe 100644
+--- a/laravel-app/app/Http/Controllers/CampaignController.php
++++ b/laravel-app/app/Http/Controllers/CampaignController.php
+@@ -30,6 +30,15 @@
+  */
+ class CampaignController extends Controller
+ {
++    /**
++     * กันไม่ให้ user เปิด/สั่งงาน Campaign ของคนอื่นด้วยการเดา ID (IDOR)
++     * เรียกต้นทางทุก action ที่รับ Campaign เข้ามาผ่าน route-model binding
++     */
++    private function authorizeOwner(Campaign $campaign): void
++    {
++        abort_unless($campaign->created_by === auth()->id(), 403);
++    }
++
+     /**
+      * แสดงรายการ Campaign ทั้งหมด (หน้า Dashboard)
+      */
+@@ -55,6 +64,8 @@ public function create(): View
+      */
+     public function show(Campaign $campaign): View
+     {
++        $this->authorizeOwner($campaign);
++
+         $leads = Lead::where('campaign_id', $campaign->id)
+             ->with('company')
+             ->orderByDesc('lead_score')
+@@ -101,6 +112,8 @@ public function store(Request $request): RedirectResponse
+      */
+     public function parse(Campaign $campaign, PythonAgentClient $client): RedirectResponse
+     {
++        $this->authorizeOwner($campaign);
++
+         $result = $client->parseOnly($campaign);
+ 
+         if (($result['status'] ?? null) !== 'parsed' || empty($result['criteria'])) {
+@@ -132,6 +145,8 @@ public function parse(Campaign $campaign, PythonAgentClient $client): RedirectRe
+      */
+     public function updateCriteria(Request $request, Campaign $campaign): RedirectResponse
+     {
++        $this->authorizeOwner($campaign);
++
+         $data = $request->validate([
+             'industries' => ['sometimes', 'array'],
+             'locations' => ['sometimes', 'array'],
+@@ -160,6 +175,8 @@ public function updateCriteria(Request $request, Campaign $campaign): RedirectRe
+      */
+     public function start(Campaign $campaign): RedirectResponse
+     {
++        $this->authorizeOwner($campaign);
++
+         if ($campaign->status !== 'draft') {
+             return redirect()
+                 ->route('campaigns.show', $campaign)
+@@ -180,6 +197,8 @@ public function start(Campaign $campaign): RedirectResponse
+      */
+     public function cancel(Campaign $campaign): RedirectResponse
+     {
++        $this->authorizeOwner($campaign);
++
+         if (in_array($campaign->status, ['completed', 'cancelled'], true)) {
+             return redirect()
+                 ->route('campaigns.show', $campaign)
+@@ -201,6 +220,8 @@ public function cancel(Campaign $campaign): RedirectResponse
+      */
+     public function retry(Campaign $campaign): RedirectResponse
+     {
++        $this->authorizeOwner($campaign);
++
+         if ($campaign->status !== 'failed') {
+             return redirect()
+                 ->route('campaigns.show', $campaign)
+diff --git a/laravel-app/app/Http/Controllers/Internal/InternalCallbackController.php b/laravel-app/app/Http/Controllers/Internal/InternalCallbackController.php
+index 733aca5..6aa15f0 100644
+--- a/laravel-app/app/Http/Controllers/Internal/InternalCallbackController.php
++++ b/laravel-app/app/Http/Controllers/Internal/InternalCallbackController.php
+@@ -84,7 +84,7 @@ public function researchResults(Request $request): JsonResponse
+                 $company = Company::firstOrCreate(
+                     [
+                         'campaign_id' => $data['campaign_id'],
+-                        'name' => $item['name'],
++                        'company_name' => $item['name'],
+                     ],
+                     [
+                         'province' => $item['province'] ?? null,
+@@ -129,11 +129,21 @@ public function websiteResults(Request $request): JsonResponse
+             'results.*.website_status' => ['nullable', 'string', 'max:255'],
+         ]);
+ 
+-        DB::transaction(function () use ($data) {
++        // map website_status ที่ Python ส่งมา (found/not_found/...) ให้ตรงกับ enum ใน DB
++        $statusMap = [
++            'found' => 'active',
++            'not_found' => 'down',
++        ];
++
++        DB::transaction(function () use ($data, $statusMap) {
+             foreach ($data['results'] as $item) {
+                 Company::where('campaign_id', $data['campaign_id'])
+-                    ->where('name', $item['company_name'])
+-                    ->update(['web_url' => $item['web_url'] ?? null]);
++                    ->where('company_name', $item['company_name'])
++                    ->update([
++                        'web_url' => $item['web_url'] ?? null,
++                        'has_website' => $item['has_website'],
++                        'website_status' => $statusMap[$item['website_status'] ?? ''] ?? 'unknown',
++                    ]);
+             }
+         });
+ 
+@@ -170,7 +180,7 @@ public function crawlResults(Request $request): JsonResponse
+         DB::transaction(function () use ($data) {
+             foreach ($data['results'] as $item) {
+                 $company = Company::where('campaign_id', $data['campaign_id'])
+-                    ->where('name', $item['company_name'])
++                    ->where('company_name', $item['company_name'])
+                     ->first();
+ 
+                 if (! $company) {
+@@ -239,7 +249,7 @@ public function aiAnalysisResults(Request $request): JsonResponse
+         DB::transaction(function () use ($data) {
+             foreach ($data['results'] as $item) {
+                 $company = Company::where('campaign_id', $data['campaign_id'])
+-                    ->where('name', $item['company_name'])
++                    ->where('company_name', $item['company_name'])
+                     ->first();
+ 
+                 if (! $company) {
+@@ -293,7 +303,7 @@ public function leadScores(Request $request): JsonResponse
+                 }
+ 
+                 $company = Company::where('campaign_id', $data['campaign_id'])
+-                    ->where('name', $item['company_name'])
++                    ->where('company_name', $item['company_name'])
+                     ->first();
+ 
+                 if (! $company) {
+diff --git a/laravel-app/app/Http/Middleware/VerifyInternalSecret.php b/laravel-app/app/Http/Middleware/VerifyInternalSecret.php
+deleted file mode 100644
+index fe128b1..0000000
+--- a/laravel-app/app/Http/Middleware/VerifyInternalSecret.php
++++ /dev/null
+@@ -1,27 +0,0 @@
+-<?php
+-
+-namespace App\Http\Middleware;
+-
+-use Closure;
+-use Illuminate\Http\Request;
+-use Symfony\Component\HttpFoundation\Response;
+-
+-class VerifyInternalSecret
+-{
+-    /**
+-     * Handle an incoming request.
+-     *
+-     * @param  Closure(Request): (Response)  $next
+-     */
+-    public function handle(Request $request, Closure $next): Response
+-    {
+-        $expected = (string) config('services.python_agent.secret');
+-        $provided = $request->bearerToken();
+-
+-        if(!$expected || $provided !== $expected) {
+-            return response()->json(['error' => 'unauthorized'], 401);
+-        }
+-
+-        return $next($request);
+-    }
+-}
+diff --git a/laravel-app/app/Jobs/Processcampaignjob.php b/laravel-app/app/Jobs/Processcampaignjob.php
+index 678c1cf..dc21841 100644
+--- a/laravel-app/app/Jobs/Processcampaignjob.php
++++ b/laravel-app/app/Jobs/Processcampaignjob.php
+@@ -41,16 +41,18 @@ public function __construct(public Campaign $campaign) {}
+     public function handle(PythonAgentClient $client): void
+     {
+         // ---- 1. สร้าง ResearchJob ----
+-        // ใช้ firstOrCreate กันสร้างซ้ำถ้า Job นี้ถูก retry (attempt ที่ 2, 3)
+-        $researchJob = ResearchJob::firstOrCreate(
+-            [
+-                'campaign_id' => $this->campaign->id,
+-                'status' => 'pending',
+-            ],
+-            [
+-                'progress_percent' => 0,
+-            ]
+-        );
++        // กันสร้างซ้ำตอน retry (attempt 2, 3): reuse งานที่ยังไม่จบ (pending/queued/running)
++        // แทนที่จะ key เฉพาะ status='pending' ซึ่งจะพลาดถ้า attempt แรกดันไปเป็น running แล้ว
++        $researchJob = ResearchJob::where('campaign_id', $this->campaign->id)
++            ->whereIn('status', ['pending', 'queued', 'running'])
++            ->latest()
++            ->first();
++
++        $researchJob ??= ResearchJob::create([
++            'campaign_id' => $this->campaign->id,
++            'status' => 'pending',
++            'progress_percent' => 0,
++        ]);
+ 
+         try {
+             $this->campaign->update([
+@@ -92,7 +94,7 @@ public function failed(Throwable $exception): void
+         ]);
+ 
+         ResearchJob::where('campaign_id', $this->campaign->id)
+-            ->where('status', 'pending')
++            ->whereIn('status', ['pending', 'queued', 'running'])
+             ->update([
+                 'status' => 'failed',
+                 'error_message' => $exception->getMessage(),
+diff --git a/laravel-app/bootstrap/app.php b/laravel-app/bootstrap/app.php
+index 7a2848f..97530b4 100644
+--- a/laravel-app/bootstrap/app.php
++++ b/laravel-app/bootstrap/app.php
+@@ -1,5 +1,6 @@
+ <?php
+ 
++use App\Http\Middleware\VerifyPythonAgentSecret;
+ use Illuminate\Foundation\Application;
+ use Illuminate\Foundation\Configuration\Exceptions;
+ use Illuminate\Foundation\Configuration\Middleware;
+@@ -8,11 +9,14 @@
+ return Application::configure(basePath: dirname(__DIR__))
+     ->withRouting(
+         web: __DIR__.'/../routes/web.php',
++        api: __DIR__.'/../routes/api.php',
+         commands: __DIR__.'/../routes/console.php',
+         health: '/up',
+     )
+     ->withMiddleware(function (Middleware $middleware): void {
+-        //
++        $middleware->alias([
++            'verify.python.secret' => VerifyPythonAgentSecret::class,
++        ]);
+     })
+     ->withExceptions(function (Exceptions $exceptions): void {
+         $exceptions->shouldRenderJsonWhen(
+diff --git a/laravel-app/config/services.php b/laravel-app/config/services.php
+index 10c31f1..2b52187 100644
+--- a/laravel-app/config/services.php
++++ b/laravel-app/config/services.php
+@@ -36,10 +36,10 @@
+     ],
+ 
+     // Internal Python AI Processing
+-    'Python_agent' => [
+-        'url' => env('PYTHON_AGENT_URL', 'http://python-agent:8000'),
++    'python_agent' => [
++        'base_url' => env('PYTHON_AGENT_URL', 'http://python-agent:8001'),
+         'secret' => env('PYTHON_AGENT_SECRET'),
+-        'callback_url' => env('PYTHON_AGENT_CALLBACK_URL', 'http://laravel-app')
++        'callback_base_url' => env('PYTHON_AGENT_CALLBACK_URL', 'http://laravel-app/api/internal'),
+     ]
+ 
+ ];
+diff --git a/python-agent/app/core/config.py b/python-agent/app/core/config.py
+index 9f272e8..2102aea 100644
+--- a/python-agent/app/core/config.py
++++ b/python-agent/app/core/config.py
+@@ -13,7 +13,7 @@ class Settings(BaseSettings):
+     APP_ENV: str
+     APP_timezone: str
+ 
+-    PYTHON_AGENT_SECRET: str = "0JIlSM0omSC9clze0vhNoIVH"
++    PYTHON_AGENT_SECRET: str
+ 
+     # AI (Chatgpt)
+     OPENAI_API_KEY: str | None = None
+@@ -23,7 +23,7 @@ class Settings(BaseSettings):
+ 
+     # Check ว่ามี api key
+     @property
+-    def has_ai(self) -> Settings:
++    def has_ai(self) -> bool:
+         return bool(self.OPENAI_API_KEY)
+ 
+ 
+diff --git a/python-agent/app/core/security.py b/python-agent/app/core/security.py
+index 9e7fc56..3984d24 100644
+--- a/python-agent/app/core/security.py
++++ b/python-agent/app/core/security.py
+@@ -16,7 +16,7 @@ async def verify_internal_secret(
+ 
+     schema, __, token = authorization.partition(" ")
+ 
+-    if schema.lower() != "Bearer" or token != settings.python_agent_secret:
++    if schema.lower() != "bearer" or token != settings.PYTHON_AGENT_SECRET:
+         raise HTTPException(
+             status_code=status.HTTP_401_UNAUTHORIZED,
+             detail="Invalid internal service credentials",
+diff --git a/python-agent/app/services/ai_criteria_parser.py b/python-agent/app/services/ai_criteria_parser.py
+index 01a911c..28c5824 100644
+--- a/python-agent/app/services/ai_criteria_parser.py
++++ b/python-agent/app/services/ai_criteria_parser.py
+@@ -9,6 +9,8 @@ _SIGNAL_KEYWORDS: dict[SignalType, list[str]] = {
+     "old_website": ["เว็บเก่า"],
+     "slow_website": ["เว็บช้า"],
+     "no_ssl": ["ไม่มี ssl"],
++    "no_clear_cta": ["ไม่มีปุ่มติดต่อ", "ไม่มี cta", "ปุ่มติดต่อไม่ชัด"],
++    "not_mobile_friendly": ["ไม่รองรับมือถือ", "เปิดในมือถือไม่ได้", "ไม่ responsive"],
+     "no_website": ["ไม่มีเว็บไซต์"],
+     "broken_website": ["เว็บพัง", "เว็บ error"],
+     "no_seo": ["ไม่มี SEO"],
+@@ -19,7 +21,7 @@ _SIGNAL_KEYWORDS: dict[SignalType, list[str]] = {
+ def _fallback_parse_signals(signal_description: str) -> list[SignalType]:
+     text = signal_description.lower()
+     found: list[SignalType] = []
+-    for signal, keywords in _SIGNAL_KEYWORDS.item():
++    for signal, keywords in _SIGNAL_KEYWORDS.items():
+         if any(keyword in text for keyword in keywords):
+             found.append(signal)
+     return found
+@@ -48,7 +50,7 @@ def parse(request: CampaignProcessRequest) -> SearchCriteria:
+ 
+         else:
+             target_Signals = _fallback_parse_signals(request.signal_description)
+-            mock = "mock"
++            source = "mock"
+ 
+     return SearchCriteria(
+         country=request.country,
+@@ -59,6 +61,6 @@ def parse(request: CampaignProcessRequest) -> SearchCriteria:
+         must_have_website=request.must_have_website,
+         required_contact_types=request.required_contact_types,
+         maximum_leads=request.maximum_leads,
+-        target_signals=request.target_signals,
+-        source=request.source,
++        target_signals=target_Signals,
++        source=source,
+     )

@@ -9,6 +9,8 @@ _SIGNAL_KEYWORDS: dict[SignalType, list[str]] = {
     "old_website": ["เว็บเก่า"],
     "slow_website": ["เว็บช้า"],
     "no_ssl": ["ไม่มี ssl"],
+    "no_clear_cta": ["ไม่มีปุ่มติดต่อ", "ไม่มี cta", "ปุ่มติดต่อไม่ชัด"],
+    "not_mobile_friendly": ["ไม่รองรับมือถือ", "เปิดในมือถือไม่ได้", "ไม่ responsive"],
     "no_website": ["ไม่มีเว็บไซต์"],
     "broken_website": ["เว็บพัง", "เว็บ error"],
     "no_seo": ["ไม่มี SEO"],
@@ -19,7 +21,7 @@ _SIGNAL_KEYWORDS: dict[SignalType, list[str]] = {
 def _fallback_parse_signals(signal_description: str) -> list[SignalType]:
     text = signal_description.lower()
     found: list[SignalType] = []
-    for signal, keywords in _SIGNAL_KEYWORDS.item():
+    for signal, keywords in _SIGNAL_KEYWORDS.items():
         if any(keyword in text for keyword in keywords):
             found.append(signal)
     return found
@@ -48,7 +50,7 @@ def parse(request: CampaignProcessRequest) -> SearchCriteria:
 
         else:
             target_Signals = _fallback_parse_signals(request.signal_description)
-            mock = "mock"
+            source = "mock"
 
     return SearchCriteria(
         country=request.country,
@@ -59,6 +61,6 @@ def parse(request: CampaignProcessRequest) -> SearchCriteria:
         must_have_website=request.must_have_website,
         required_contact_types=request.required_contact_types,
         maximum_leads=request.maximum_leads,
-        target_signals=request.target_signals,
-        source=request.source,
+        target_signals=target_Signals,
+        source=source,
     )
