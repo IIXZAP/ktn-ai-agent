@@ -345,13 +345,13 @@ class InternalCallbackController extends Controller
         ResearchJob::whereKey($data['research_job_id'])->update([
             'status' => 'completed',
             'progress_percent' => 100,
-            'finished_at' => $data['completed_at'],
+            'finished_at' => \Carbon\Carbon::parse($data['completed_at']),
         ]);
 
         Campaign::whereKey($data['campaign_id'])->update([
             'status' => 'completed',
             'progress_percent' => 100,
-            'completed_at' => $data['completed_at'],
+            'completed_at' => \Carbon\Carbon::parse($data['completed_at']),
         ]);
 
         return response()->json(['status' => 'ok']);
@@ -373,7 +373,7 @@ class InternalCallbackController extends Controller
         ResearchJob::whereKey($data['research_job_id'])->update([
             'status' => 'failed',
             'error_message' => $data['error_message'],
-            'finished_at' => $data['failed_at'],
+            'finished_at' => \Carbon\Carbon::parse($data['failed_at']),
         ]);
 
         Campaign::whereKey($data['campaign_id'])->update([

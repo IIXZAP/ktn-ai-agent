@@ -23,6 +23,7 @@ class CampaignSearchCriteria extends Model
     ];
 
     protected $casts = [
+        'industries'        => 'array',
         'industries_type'   => 'array',
         'locations'         => 'array',
         'target_signals'    => 'array',
