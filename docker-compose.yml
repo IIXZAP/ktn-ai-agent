@@ -1,0 +1,76 @@
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: laravel
+      MYSQL_USER: laravel
+      MYSQL_PASSWORD: laravel_secret
+      MYSQL_ROOT_PASSWORD: root_secret
+    volumes:
+      - mysql-data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot_secret"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  python-agent:
+    build:
+      context: ./python-agent
+    env_file:
+      - ./python-agent/.env
+    ports:
+      - "8001:8001"
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  laravel-app:
+    build:
+      context: ./laravel-app
+    image: ktn-ai-agent-laravel-app
+    env_file:
+      - ./laravel-app/.env
+    ports:
+      - "8000:80"
+    volumes:
+      - laravel-storage:/var/www/html/storage
+    depends_on:
+      mysql:
+        condition: service_healthy
+      python-agent:
+        condition: service_started
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  laravel-queue:
+    image: ktn-ai-agent-laravel-app
+    env_file:
+      - ./laravel-app/.env
+    command: php artisan queue:work --tries=3 --timeout=120
+    volumes:
+      - laravel-storage:/var/www/html/storage
+    depends_on:
+      mysql:
+        condition: service_healthy
+      laravel-app:
+        condition: service_started
+      python-agent:
+        condition: service_started
+    networks:
+      - app-network
+    restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  laravel-storage:
+  mysql-data:

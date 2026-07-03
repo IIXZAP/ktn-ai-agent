@@ -1,9 +1,68 @@
-@import 'tailwindcss';
+@import "tailwindcss";
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
 
 @theme {
-    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
-        'Segoe UI Symbol', 'Noto Color Emoji';
+    /* ฟอนต์เดิมที่ Laravel starter kit ให้มา (Instrument Sans) เปลี่ยนเป็นฟอนต์ที่ออกแบบไว้ */
+    --font-sans:
+        "IBM Plex Sans Thai", ui-sans-serif, system-ui, sans-serif,
+        "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
+        "Noto Color Emoji";
+
+    /* เพิ่มฟอนต์ใหม่ 2 ตัวสำหรับหัวข้อ/ตัวเลข (ธีม "สถานีเรดาร์") */
+    --font-display: "Space Grotesk", sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+    /* สีธีม "สถานีเรดาร์" - พิมพ์แบบนี้ Tailwind v4 จะสร้าง
+       utility class ให้อัตโนมัติ เช่น bg-paper, text-signal-teal, border-signal-red */
+    --color-paper: #eff2f1;
+    --color-panel: #ffffff;
+    --color-ink: #1c2321;
+    --color-ink-soft: #5b6560;
+    --color-hairline: #dadfdc;
+    --color-signal-amber: #e8a33d;
+    --color-signal-teal: #1f7a6c;
+    --color-signal-green: #2f9e44;
+    --color-signal-red: #c1432d;
+
+    /* animation ลำแสงเรดาร์ - v4 จะสร้าง class .animate-radar-sweep ให้อัตโนมัติ
+       จาก namespace --animate-* นี้ (ต้องมี @keyframes ชื่อตรงกันคู่กันเสมอ) */
+    --animate-radar-sweep: radar-sweep 1.4s linear infinite;
+}
+
+@keyframes radar-sweep {
+    0% {
+        background-position: 0 0;
+    }
+    100% {
+        background-position: 56px 0;
+    }
+}
+
+/* Custom utility (แทนที่ backgroundImage ใน tailwind.config.js เดิมของ v3)
+   v4 ใช้ @utility แทนการประกาศใน config file */
+@utility bg-sweep-stripes {
+    background-image: repeating-linear-gradient(
+        45deg,
+        rgba(255, 255, 255, 0.35) 0px,
+        rgba(255, 255, 255, 0.35) 8px,
+        transparent 8px,
+        transparent 16px
+    );
+}
+
+@layer base {
+    body {
+        @apply bg-paper text-ink font-sans antialiased;
+    }
+}
+
+@layer components {
+    .status-pill {
+        @apply inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-mono;
+    }
+    .status-dot {
+        @apply h-1.5 w-1.5 rounded-full;
+    }
 }
