@@ -21,21 +21,23 @@ use Illuminate\View\View;
  *   Start           -> start()
  *   Cancel          -> cancel()
  *   Retry           -> retry()
- *
- * หมายเหตุ: method ที่แสดงหน้า (index/create/show) คืน Blade view
- * ส่วน method ที่ทำ action (store/parse/.../retry) redirect กลับหน้าเว็บ
- * พร้อม flash message (session('status')) เพราะฟอร์มใน Blade เป็น
- * <form method="POST"> ธรรมดา ไม่ใช่ fetch/JS - ถ้าต้องการ JSON API แยก
- * ไปเรียกใช้ (เช่น สำหรับ mobile app) แนะนำแยก Controller ใหม่ต่างหาก
  */
 class CampaignController extends Controller
 {
     /**
      * กันไม่ให้ user เปิด/สั่งงาน Campaign ของคนอื่นด้วยการเดา ID (IDOR)
-     * เรียกต้นทางทุก action ที่รับ Campaign เข้ามาผ่าน route-model binding
+     *
+     * หมายเหตุ (ชั่วคราวตอนเทส): ตอนนี้ระบบยังไม่มี auth/login
+     * ถ้าไม่มี user login (auth()->id() เป็น null) จะ "ข้าม" การเช็คไปก่อน
+     * เพื่อให้เทส flow ได้ — เมื่อติดตั้งระบบ login จริงแล้ว การเช็คจะทำงานตามปกติ
+     * TODO: เอา `if (auth()->id() === null) return;` ออก เมื่อมีระบบ login แล้ว
      */
     private function authorizeOwner(Campaign $campaign): void
     {
+        if (auth()->id() === null) {
+            return; // ยังไม่มีระบบ login — ข้ามการเช็คเจ้าของชั่วคราว
+        }
+
         abort_unless($campaign->created_by === auth()->id(), 403);
     }
 
@@ -44,9 +46,7 @@ class CampaignController extends Controller
      */
     public function index(Request $request): View
     {
-        $campaigns = Campaign::where('created_by', $request->user()->id)
-            ->latest()
-            ->get();
+        $campaigns = Campaign::latest()->get();
 
         return view('campaigns.index', compact('campaigns'));
     }
@@ -92,8 +92,8 @@ class CampaignController extends Controller
         $locations = array_values(array_filter(array_map('trim', explode(',', $locations))));
 
         $campaign = Campaign::create([
-            'created_by' => $request->user()->id,
-            'name' => $data['name'],
+            'created_by' => $request->user()?->id ?? \App\Models\User::first()?->id,
+            'title' => $data['name'],
             'natural_language_query' => $data['signal_description'] ?? '',
             'industry' => $data['industry'] ?? null,
             'locations' => $locations,

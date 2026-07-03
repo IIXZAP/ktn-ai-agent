@@ -16,6 +16,8 @@ async def verify_internal_secret(
 
     schema, __, token = authorization.partition(" ")
 
+    # FIX 1: schema.lower() ได้ "bearer" ตัวเล็ก ต้องเทียบกับ "bearer" ไม่ใช่ "Bearer"
+    # FIX 2: field จริงชื่อ PYTHON_AGENT_SECRET (ตัวใหญ่) เดิมเขียน python_agent_secret -> AttributeError
     if schema.lower() != "bearer" or token != settings.PYTHON_AGENT_SECRET:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
